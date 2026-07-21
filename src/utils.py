@@ -1,5 +1,5 @@
-__author__ = 'Stan He@Sickkids.ca'
-__contact__ = 'stan.he@sickkids.ca'
+__author__ = 'Stan He'
+__contact__ = 'stan.he'
 __date__ = ['2021-10-15', '2022-02-04', '2022-07-11']
 """Preprocessing pipeline components
 """
