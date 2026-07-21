@@ -1,9 +1,8 @@
 # Overview
 
-The following is a list of of code used for analyses performed for the "_Exposomics for Childhood Asthma_" manuscript submitted to Nature Communications. 
-**IMPORTANT**: Please note that since these analyses used participant data from a prospective birth cohort, we cannot share sensitive data, but the output from the scripts is included in the Jupyter notebooks. Please review the "_Data and code availability_" section at the end of the manuscript for more information.
+The following is a list of of code used for analyses performed for an "_Exposomics for Childhood Asthma_" manuscript submitted for publication. IMPORTANT: Please note that since these analyses used child participant data from a prospective birth cohort, we cannot share sensitive data, but the output from the scripts is included in the Jupyter notebooks. Please review the "_Data and code availability_" section at the end of the manuscript for more information.
 
-A preprint of the manuscript is also available for viewing at medRxiv: https://www.medrxiv.org/content/10.64898/2026.03.02.26347385v2 . 
+A version of manuscript has been made available for viewing at medRxiv: https://www.medrxiv.org/content/10.64898/2026.03.02.26347385v2 .
 
 
 
