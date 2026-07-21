@@ -1,0 +1,281 @@
+---
+title: "Analysyis of NPX format Olink data"
+author: "Geoff Winsor"
+date: "2024-10-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Gene set enrichment analysis (GSEA) of Olink data using OlinkAnalyze and clusterProfiler
+
+
+```{r}
+library(OlinkAnalyze)   
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(clusterProfiler)
+
+#install.packages(
+#  "msigdbdf",
+#  repos = c("https://igordot.r-universe.dev", "https://cloud.r-project.org")
+#)
+
+
+library(msigdbr)
+
+```
+
+
+
+### Read NPX data (read_NPX)
+```{r}
+data <- read_NPX("data/2127B Exported NXP Values.xlsx")
+```
+
+
+
+
+### Input the exposure data file used for the other anlayses but keep only the variables of interest
+```{r}
+alldata <- read.csv("data/aim2_exwas_data_2024-June-11.csv")
+
+
+df = read.csv('data/CHILD_ML_Study_variables_selected_and_transformed_A.csv')
+df <- df %>% select(c('Subject_Number','PSS_18week_High_Stress','PSS_18week_Moderate_Stress','PSS_18week_Low_Stress','PSS_18week_Missing'))
+
+df$subject_id <- df$Subject_Number
+df$Subject_Number<-NULL
+df$PSS_18week_High_Stress<-as.numeric(as.logical(df$PSS_18week_High_Stress))
+df$PSS_18week_Moderate_Stress<-as.numeric(as.logical(df$PSS_18week_Moderate_Stress))
+df$PSS_18week_Low_Stress<-as.numeric(as.logical(df$PSS_18week_Low_Stress))
+df$PSS_18week_Missing<-as.numeric(as.logical(df$PSS_18week_Missing))
+df <- df %>% filter(PSS_18week_Missing==0)
+
+alldata<- merge(alldata, df, by.x = "subject_id", by.y = "subject_id", all.x = TRUE, all.y = FALSE)
+
+
+
+alldata$adrenic_acid<-alldata$log_C22.4n6_3m
+alldata <- alldata %>% select(c('subject_id','weekly_furniture_floor_dusting_polish_use_mother_prenatal','atopic_dermatitis_status_1y','atopy_binary_1y','adrenic_acid','monthly_furniture_floor_dusting_polish_use_prenatal','daily_hand_sanitizer_used_prenatal','prenatal_antibacterial','asthma_5y','recurrent_wheeze_binary_1y','clean_home_more_than_4_times_per_month_3m','log_dehp_bc_rec_dust_3m','family_asthma_history','daily_hand_sanitizer_used_5Y','vitamins_supplements_3m','weekly_chem_hand_cleaner_use_mother_prenatal','weekly_oven_cleaner_use_mother_prenatal','frequent_baby_lotion_used_3m','weekly_or_more_bleach_use_prenatal','is_male','is_caucasian','BF_3m','vaginal_birth','PSS_18week_High_Stress','PSS_18week_Moderate_Stress','PSS_18week_Low_Stress'))
+
+
+vitamins_d_use_df = read.csv("data/vitamin_D_use_by_infant_all_sources_3m.csv")
+alldata<- merge(alldata, vitamins_d_use_df, by.x = "subject_id", by.y = "subject_id", all.x = TRUE, all.y = FALSE)
+```
+
+
+### Generate the variable representing exposure to house dust DEHP in the upper quartile. 
+```{r}
+# Calculate the upper quartile (75th percentile) of the variable
+upper_quartile <- quantile(alldata$log_dehp_bc_rec_dust_3m, 0.75, na.rm = TRUE)
+alldata$upper_quartile_indicator <- alldata$log_dehp_bc_rec_dust_3m > upper_quartile
+alldata$upper_quartile_indicator <- as.integer(alldata$upper_quartile_indicator)
+
+```
+
+
+### Generate the variable representing exposure to adrenic acid in the upper quartile. 
+```{r}
+# Calculate the upper quartile (75th percentile) of the variable
+upper_quartile_adrenic_acid <- quantile(alldata$adrenic_acid, 0.75, na.rm = TRUE)
+alldata$upper_quartile_adrenic_acid <- alldata$adrenic_acid > upper_quartile_adrenic_acid
+alldata$upper_quartile_adrenic_acid <- as.integer(alldata$upper_quartile_adrenic_acid)
+
+```
+
+
+
+### Set the binary variables as factors
+```{r}
+
+alldata$vitamins_supplements_3m<-as.factor(alldata$vitamins_supplements_3m)
+alldata$daily_hand_sanitizer_used_5Y<-as.factor(alldata$daily_hand_sanitizer_used_5Y)
+alldata$weekly_chem_hand_cleaner_use_mother_prenatal<-as.factor(alldata$weekly_chem_hand_cleaner_use_mother_prenatal)
+alldata$monthly_furniture_floor_dusting_polish_use_prenatal<-as.factor(alldata$monthly_furniture_floor_dusting_polish_use_prenatal)
+alldata$weekly_oven_cleaner_use_mother_prenatal<-as.factor(alldata$weekly_oven_cleaner_use_mother_prenatal)
+
+alldata$PSS_18week_High_Stress<-as.factor(alldata$PSS_18week_High_Stress)
+alldata$PSS_18week_Moderate_Stress<-as.factor(alldata$PSS_18week_Moderate_Stress)
+alldata$PSS_18week_Low_Stress<-as.factor(alldata$PSS_18week_Low_Stress)
+
+alldata$upper_quartile_adrenic_acid<-as.factor(alldata$upper_quartile_adrenic_acid)
+alldata$frequent_baby_lotion_used_3m<-as.factor(alldata$frequent_baby_lotion_used_3m)
+alldata$is_male<-as.factor(alldata$is_male)
+alldata$family_asthma_history<-as.factor(alldata$family_asthma_history)
+alldata$BF_3m<-as.factor(alldata$BF_3m)
+alldata$prenatal_antibacterial<-as.factor(alldata$prenatal_antibacterial)
+alldata$vaginal_birth<-as.factor(alldata$vaginal_birth)
+alldata$weekly_or_more_bleach_use_prenatal<-as.factor(alldata$weekly_or_more_bleach_use_prenatal)
+alldata$daily_hand_sanitizer_used_prenatal<-as.factor(alldata$daily_hand_sanitizer_used_prenatal)
+alldata$upper_quartile_indicatoxfr<-as.factor(alldata$upper_quartile_indicator)
+alldata$asthma_5y<-as.factor(alldata$asthma_5y)
+alldata$weekly_furniture_floor_dusting_polish_use_mother_prenatal<-as.factor(alldata$weekly_furniture_floor_dusting_polish_use_mother_prenatal)
+alldata$vitamin_D_taken_by_infant_3m<-as.factor(alldata$vitamin_D_taken_by_infant_3m)
+```
+
+
+### Left join on the eligible subjects data to restrict the analysis to consented participants only (and get biological sex and study centre)
+```{r}
+eligible_subjects <- read.csv("data/eligible_subjects.csv")
+eligible_subjects <- eligible_subjects %>% select(c('subject_id','gender','study_centre'))
+eligible_subjects$gender<-as.factor(eligible_subjects$gender)
+eligible_subjects$study_centre<-as.factor(eligible_subjects$study_centre)
+
+```
+
+
+### Get age of sample collection
+```{r}
+metadata <-read.csv("data/v1 2127B link to CHILD ID with age.csv")
+metadata <- merge(metadata, alldata, by.x = "subjectnumber", by.y = "subject_id", all.x = TRUE, all.y = FALSE)
+metadata <- merge(metadata, eligible_subjects, by.x = "subjectnumber", by.y = "subject_id", all.x = TRUE, all.y = FALSE)
+
+```
+
+
+
+
+### Merge the metadata dataframe with the data dataframe
+```{r}
+# Merge subject_id, visit, collect_age
+merged_data <- merge(data, metadata, by.x = "SampleID", by.y = "SampleID", all.x = TRUE, all.y = FALSE)
+```
+
+
+### Systemic antibiotic use
+```{r}
+systemic_antibiotics<-read.csv("data/systemic_antibiotics_taken_after_hospital_discharge_to_1y.csv")
+
+# Identify participants that took 3 or more systemic antibiotics before the age of 1
+systemic_antibiotics$systemic_ab_gte_3 <- systemic_antibiotics$num_systemic_antibotics_birth_1y >=3 
+systemic_antibiotics$systemic_ab_gte_3 <- as.integer(systemic_antibiotics$systemic_ab_gte_3)
+systemic_antibiotics$systemic_ab_gte_3 <- as.factor(systemic_antibiotics$systemic_ab_gte_3)
+
+# Identify participants that took 2 or more systemic antibiotics before the age of 1
+systemic_antibiotics$systemic_ab_gte_2 <- systemic_antibiotics$num_systemic_antibotics_birth_1y >=2
+systemic_antibiotics$systemic_ab_gte_2 <- as.integer(systemic_antibiotics$systemic_ab_gte_2)
+systemic_antibiotics$systemic_ab_gte_2 <- as.factor(systemic_antibiotics$systemic_ab_gte_2)
+
+merged_data <- merge(merged_data, systemic_antibiotics, by.x = "subjectnumber", by.y = "subject_id", all.x = TRUE, all.y = FALSE)     
+
+```
+
+
+### Updates the assay names so that they match the gene names used by clusterProfiler 
+```{r}
+# Fix some assay names so that they are compatible with the gsea done below
+
+merged_data$Assay <- str_replace(merged_data$Assay, "-", "")
+merged_data$Assay <- str_replace(merged_data$Assay, " ", "")
+merged_data$Assay <- str_replace(merged_data$Assay, "alpha", "A")
+merged_data$Assay <- str_replace(merged_data$Assay, "beta", "B")
+merged_data$Assay <- str_replace(merged_data$Assay, "gamma", "G")
+merged_data$Assay <- str_replace(merged_data$Assay, "MCP3", "CCL7")
+merged_data$Assay <- str_replace(merged_data$Assay, "MCP2", "CCL8")
+merged_data$Assay <- str_replace(merged_data$Assay, "Flt3L", "FLT3LG")
+merged_data$Assay <- str_replace(merged_data$Assay, "BetaNGF", "NGF")
+merged_data$Assay <- str_replace(merged_data$Assay, "ST1A1", "STP")
+merged_data$Assay <- str_replace(merged_data$Assay, "NT3", "NTF3")
+merged_data$Assay <- str_replace(merged_data$Assay, "OPG", "TNFRSF11B")
+merged_data$Assay <- str_replace(merged_data$Assay, "SCP", "KITLG")
+merged_data$Assay <- str_replace(merged_data$Assay, "LAPTGFB-1", "TGFB1")
+merged_data$Assay <- str_replace(merged_data$Assay, "LAPTGFB1", "TGFB1")
+
+merged_data$Assay <- str_replace(merged_data$Assay, "TWEAK", "TNFSF12")
+merged_data$Assay <- str_replace(merged_data$Assay, "TRAIL", "TNFSF10")
+merged_data$Assay <- str_replace(merged_data$Assay, "PDL1", "Q9NZQ7")
+merged_data$Assay <- str_replace(merged_data$Assay, "TNFB", "LTA")
+merged_data$Assay <- str_replace(merged_data$Assay, "TRANCE", "TNFSF11")
+merged_data$Assay <- str_replace(merged_data$Assay, "MCP4", "CCL13")
+merged_data$Assay <- str_replace(merged_data$Assay, "MCP1", "CCL2")
+merged_data$Assay <- str_replace(merged_data$Assay, "IL8", "CXCL8")
+merged_data$Assay <- str_replace(merged_data$Assay, "uPA", "PLAU")
+merged_data$Assay <- str_replace(merged_data$Assay, "IL8", "CXCL8")
+
+```
+
+
+# Create a separate data frame for each olink dataset based on age
+```{r}
+olink_5y <- merged_data[merged_data$time == '5Y', ]
+olink_1y <- merged_data[merged_data$time == '1Y', ]
+
+```
+
+
+
+
+
+# Associations between upper quartile adrenic acid and 1-year pathways
+
+```{r}
+
+olink_1y_filtered = olink_1y
+olink_1y_filtered <- subset(olink_1y_filtered, !is.na(upper_quartile_adrenic_acid))
+
+ttest_results_upper_quartile_adrenic_acid_1y <- olink_ttest(
+  df = olink_1y_filtered,
+  variable = "upper_quartile_adrenic_acid",
+  alternative = "two.sided")
+
+write.csv(ttest_results_upper_quartile_adrenic_acid_1y,"ttest_results_monthly_upper_quartile_adrenic_acid_1y.csv")
+ttest_results_upper_quartile_adrenic_acid_1y[order(ttest_results_upper_quartile_adrenic_acid_1y$estimate, decreasing = FALSE),]
+```
+
+
+
+```{r}
+
+set.seed(42) 
+
+gsea_upper_quartile_adrenic_acid_1y_results <- olink_pathway_enrichment(data = olink_1y_filtered, ontology='MSigDb',test_results = ttest_results_upper_quartile_adrenic_acid_1y)
+gsea_upper_quartile_adrenic_acid_1y_results$exposure = 'Upper quartile adrenic acid'
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_upper_quartile_adrenic_acid_1y_results <- gsea_upper_quartile_adrenic_acid_1y_results %>% filter(p.adjust < 0.05)
+gsea_upper_quartile_adrenic_acid_1y_results <- gsea_upper_quartile_adrenic_acid_1y_results[c("exposure", setdiff(names(gsea_upper_quartile_adrenic_acid_1y_results), "exposure"))]
+write.csv(gsea_upper_quartile_adrenic_acid_1y_results,"olink_1y_gsea_upper_quartile_adrenic_acid_1y.csv")
+gsea_upper_quartile_adrenic_acid_1y_results
+```
+
+# Associations between upper quartile adrenic acid and 5-year pathways
+
+```{r}
+olink_5y_filtered <- subset(olink_5y, !is.na(upper_quartile_adrenic_acid))
+
+
+ttest_results_monthly_upper_quartile_adrenic_acid_5y <- olink_ttest(
+  df = olink_5y_filtered,
+  variable = "upper_quartile_adrenic_acid",
+  alternative = "two.sided")
+write.csv(ttest_results_monthly_upper_quartile_adrenic_acid_5y,"ttest_results_monthly_upper_quartile_adrenic_acid_5y.csv")
+ttest_results_monthly_upper_quartile_adrenic_acid_5y[order(ttest_results_monthly_upper_quartile_adrenic_acid_5y$estimate, decreasing = FALSE),]
+```
+
+```{r}
+olink_5y_filtered |> 
+  filter(upper_quartile_adrenic_acid == 0) |> 
+  distinct(subjectnumber) |> 
+  nrow()
+```
+
+```{r}
+
+set.seed(42) 
+
+gsea_results_upper_quartile_adrenic_acid_5y <- olink_pathway_enrichment(data = olink_5y_filtered, ontology='MSigDb',test_results = ttest_results_monthly_upper_quartile_adrenic_acid_5y)
+gsea_results_upper_quartile_adrenic_acid_5y$exposure = 'Upper quartile adrenic acid'
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_results_upper_quartile_adrenic_acid_5y <- gsea_results_upper_quartile_adrenic_acid_5y %>% filter(p.adjust < 0.05)
+gsea_results_upper_quartile_adrenic_acid_5y <- gsea_results_upper_quartile_adrenic_acid_5y[c("exposure", setdiff(names(gsea_results_upper_quartile_adrenic_acid_5y), "exposure"))]
+write.csv(gsea_results_upper_quartile_adrenic_acid_5y,"olink_5y_upper_quartile_adrenic_acid_5y.csv")
+
+gsea_results_upper_quartile_adrenic_acid_5y[order(gsea_results_upper_quartile_adrenic_acid_5y$NES, decreasing = FALSE),]
+```
+
+

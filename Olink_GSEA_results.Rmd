@@ -1,0 +1,850 @@
+---
+title: "Analysyis of NPX format Olink data"
+author: "Geoff Winsor"
+date: "2024-10-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Gene set enrichment analysis (GSEA) of Olink data using OlinkAnalyze and clusterProfiler
+
+
+```{r}
+library(OlinkAnalyze)   
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(clusterProfiler)
+
+#install.packages(
+#  "msigdbdf",
+#  repos = c("https://igordot.r-universe.dev", "https://cloud.r-project.org")
+#)
+
+
+library(msigdbr)
+
+```
+
+
+
+### Read NPX data (read_NPX)
+```{r}
+data <- read_NPX("data/2127B Exported NXP Values.xlsx")
+```
+
+
+
+
+### Input the exposure data file used for the other anlayses but keep only the variables of interest
+```{r}
+alldata <- read.csv("data/aim2_exwas_data_2024-June-11.csv")
+
+
+df = read.csv('data/CHILD_ML_Study_variables_selected_and_transformed_A.csv')
+df <- df %>% select(c('Subject_Number','PSS_18week_High_Stress','PSS_18week_Moderate_Stress','PSS_18week_Low_Stress','PSS_18week_Missing'))
+
+df$subject_id <- df$Subject_Number
+df$Subject_Number<-NULL
+df$PSS_18week_High_Stress<-as.numeric(as.logical(df$PSS_18week_High_Stress))
+df$PSS_18week_Moderate_Stress<-as.numeric(as.logical(df$PSS_18week_Moderate_Stress))
+df$PSS_18week_Low_Stress<-as.numeric(as.logical(df$PSS_18week_Low_Stress))
+df$PSS_18week_Missing<-as.numeric(as.logical(df$PSS_18week_Missing))
+df <- df %>% filter(PSS_18week_Missing==0)
+
+alldata<- merge(alldata, df, by.x = "subject_id", by.y = "subject_id", all.x = TRUE, all.y = FALSE)
+
+
+
+alldata$adrenic_acid<-alldata$log_C22.4n6_3m
+alldata <- alldata %>% select(c('subject_id','weekly_furniture_floor_dusting_polish_use_mother_prenatal','atopic_dermatitis_status_1y','atopy_binary_1y','adrenic_acid','monthly_furniture_floor_dusting_polish_use_prenatal','daily_hand_sanitizer_used_prenatal','prenatal_antibacterial','asthma_5y','recurrent_wheeze_binary_1y','clean_home_more_than_4_times_per_month_3m','log_dehp_bc_rec_dust_3m','family_asthma_history','daily_hand_sanitizer_used_5Y','vitamins_supplements_3m','weekly_chem_hand_cleaner_use_mother_prenatal','weekly_oven_cleaner_use_mother_prenatal','monthly_oven_cleaner_use_mother_prenatal','frequent_baby_lotion_used_3m','weekly_or_more_bleach_use_prenatal','is_male','is_caucasian','BF_3m','vaginal_birth','PSS_18week_High_Stress','PSS_18week_Moderate_Stress','PSS_18week_Low_Stress'))
+
+
+vitamins_d_use_df = read.csv("data/vitamin_D_use_by_infant_all_sources_3m.csv")
+alldata<- merge(alldata, vitamins_d_use_df, by.x = "subject_id", by.y = "subject_id", all.x = TRUE, all.y = FALSE)
+```
+
+
+### Generate the variable representing exposure to house dust DEHP in the upper quartile. 
+```{r}
+# Calculate the upper quartile (75th percentile) of the variable
+upper_quartile <- quantile(alldata$log_dehp_bc_rec_dust_3m, 0.75, na.rm = TRUE)
+alldata$upper_quartile_indicator <- alldata$log_dehp_bc_rec_dust_3m > upper_quartile
+alldata$upper_quartile_indicator <- as.integer(alldata$upper_quartile_indicator)
+
+```
+
+
+### Generate the variable representing exposure to adrenic acid in the upper quartile. 
+```{r}
+# Calculate the upper quartile (75th percentile) of the variable
+upper_quartile_adrenic_acid <- quantile(alldata$adrenic_acid, 0.75, na.rm = TRUE)
+alldata$upper_quartile_adrenic_acid <- alldata$adrenic_acid > upper_quartile_adrenic_acid
+alldata$upper_quartile_adrenic_acid <- as.integer(alldata$upper_quartile_adrenic_acid)
+
+```
+
+
+
+### Set the binary variables as factors
+```{r}
+
+alldata$vitamins_supplements_3m<-as.factor(alldata$vitamins_supplements_3m)
+alldata$daily_hand_sanitizer_used_5Y<-as.factor(alldata$daily_hand_sanitizer_used_5Y)
+alldata$weekly_chem_hand_cleaner_use_mother_prenatal<-as.factor(alldata$weekly_chem_hand_cleaner_use_mother_prenatal)
+alldata$monthly_furniture_floor_dusting_polish_use_prenatal<-as.factor(alldata$monthly_furniture_floor_dusting_polish_use_prenatal)
+alldata$weekly_oven_cleaner_use_mother_prenatal<-as.factor(alldata$weekly_oven_cleaner_use_mother_prenatal)
+alldata$monthly_oven_cleaner_use_mother_prenatal<-as.factor(alldata$monthly_oven_cleaner_use_mother_prenatal)
+
+alldata$PSS_18week_High_Stress<-as.factor(alldata$PSS_18week_High_Stress)
+alldata$PSS_18week_Moderate_Stress<-as.factor(alldata$PSS_18week_Moderate_Stress)
+alldata$PSS_18week_Low_Stress<-as.factor(alldata$PSS_18week_Low_Stress)
+
+alldata$upper_quartile_adrenic_acid<-as.factor(alldata$upper_quartile_adrenic_acid)
+alldata$frequent_baby_lotion_used_3m<-as.factor(alldata$frequent_baby_lotion_used_3m)
+alldata$is_male<-as.factor(alldata$is_male)
+alldata$family_asthma_history<-as.factor(alldata$family_asthma_history)
+alldata$BF_3m<-as.factor(alldata$BF_3m)
+alldata$prenatal_antibacterial<-as.factor(alldata$prenatal_antibacterial)
+alldata$vaginal_birth<-as.factor(alldata$vaginal_birth)
+alldata$weekly_or_more_bleach_use_prenatal<-as.factor(alldata$weekly_or_more_bleach_use_prenatal)
+alldata$daily_hand_sanitizer_used_prenatal<-as.factor(alldata$daily_hand_sanitizer_used_prenatal)
+alldata$upper_quartile_indicatoxfr<-as.factor(alldata$upper_quartile_indicator)
+alldata$asthma_5y<-as.factor(alldata$asthma_5y)
+alldata$weekly_furniture_floor_dusting_polish_use_mother_prenatal<-as.factor(alldata$weekly_furniture_floor_dusting_polish_use_mother_prenatal)
+alldata$vitamin_D_taken_by_infant_3m<-as.factor(alldata$vitamin_D_taken_by_infant_3m)
+```
+
+
+### Left join on the eligible subjects data to restrict the analysis to consented participants only (and get biological sex and study centre)
+```{r}
+eligible_subjects <- read.csv("data/eligible_subjects.csv")
+eligible_subjects <- eligible_subjects %>% select(c('subject_id','gender','study_centre'))
+eligible_subjects$gender<-as.factor(eligible_subjects$gender)
+eligible_subjects$study_centre<-as.factor(eligible_subjects$study_centre)
+
+```
+
+
+### Get age of sample collection
+```{r}
+metadata <-read.csv("data/v1 2127B link to CHILD ID with age.csv")
+metadata <- merge(metadata, alldata, by.x = "subjectnumber", by.y = "subject_id", all.x = TRUE, all.y = FALSE)
+metadata <- merge(metadata, eligible_subjects, by.x = "subjectnumber", by.y = "subject_id", all.x = TRUE, all.y = FALSE)
+
+```
+
+
+
+
+### Merge the metadata dataframe with the data dataframe
+```{r}
+# Merge subject_id, visit, collect_age
+merged_data <- merge(data, metadata, by.x = "SampleID", by.y = "SampleID", all.x = TRUE, all.y = FALSE)
+```
+
+
+### Systemic antibiotic use
+```{r}
+systemic_antibiotics<-read.csv("data/systemic_antibiotics_taken_after_hospital_discharge_to_1y.csv")
+
+# Identify participants that took 3 or more systemic antibiotics before the age of 1
+systemic_antibiotics$systemic_ab_gte_3 <- systemic_antibiotics$num_systemic_antibotics_birth_1y >=3 
+systemic_antibiotics$systemic_ab_gte_3 <- as.integer(systemic_antibiotics$systemic_ab_gte_3)
+systemic_antibiotics$systemic_ab_gte_3 <- as.factor(systemic_antibiotics$systemic_ab_gte_3)
+
+
+# Identify participants that took 1 systemic antibiotic course before the age of 1
+systemic_antibiotics$systemic_ab_eq_1 <- systemic_antibiotics$num_systemic_antibotics_birth_1y ==1
+systemic_antibiotics$systemic_ab_eq_1 <- as.integer(systemic_antibiotics$systemic_ab_eq_1)
+systemic_antibiotics$systemic_ab_eq_1 <- as.factor(systemic_antibiotics$systemic_ab_eq_1)
+
+# Identify participants that took 2 systemic antibiotics before the age of 1
+systemic_antibiotics$systemic_ab_eq_2 <- systemic_antibiotics$num_systemic_antibotics_birth_1y ==2
+systemic_antibiotics$systemic_ab_eq_2 <- as.integer(systemic_antibiotics$systemic_ab_eq_2)
+systemic_antibiotics$systemic_ab_eq_2 <- as.factor(systemic_antibiotics$systemic_ab_eq_2)
+
+# Identify participants that took 2 or more systemic antibiotics before the age of 1
+systemic_antibiotics$systemic_ab_gte_2 <- systemic_antibiotics$num_systemic_antibotics_birth_1y >=2
+systemic_antibiotics$systemic_ab_gte_2 <- as.integer(systemic_antibiotics$systemic_ab_gte_2)
+systemic_antibiotics$systemic_ab_gte_2 <- as.factor(systemic_antibiotics$systemic_ab_gte_2)
+
+# Identify participants that took 2 or more systemic antibiotics before the age of 1
+systemic_antibiotics$systemic_ab_gte_1 <- systemic_antibiotics$num_systemic_antibotics_birth_1y >=1
+systemic_antibiotics$systemic_ab_gte_1 <- as.integer(systemic_antibiotics$systemic_ab_gte_1)
+systemic_antibiotics$systemic_ab_gte_1 <- as.factor(systemic_antibiotics$systemic_ab_gte_1)
+
+merged_data <- merge(merged_data, systemic_antibiotics, by.x = "subjectnumber", by.y = "subject_id", all.x = TRUE, all.y = FALSE)     
+
+```
+
+
+
+
+
+### Updates the assay names so that they match the gene names used by clusterProfiler 
+```{r}
+# Fix some assay names so that they are compatible with the gsea done below
+
+merged_data$Assay <- str_replace(merged_data$Assay, "-", "")
+merged_data$Assay <- str_replace(merged_data$Assay, " ", "")
+merged_data$Assay <- str_replace(merged_data$Assay, "alpha", "A")
+merged_data$Assay <- str_replace(merged_data$Assay, "beta", "B")
+merged_data$Assay <- str_replace(merged_data$Assay, "gamma", "G")
+merged_data$Assay <- str_replace(merged_data$Assay, "MCP3", "CCL7")
+merged_data$Assay <- str_replace(merged_data$Assay, "MCP2", "CCL8")
+merged_data$Assay <- str_replace(merged_data$Assay, "Flt3L", "FLT3LG")
+merged_data$Assay <- str_replace(merged_data$Assay, "BetaNGF", "NGF")
+merged_data$Assay <- str_replace(merged_data$Assay, "ST1A1", "STP")
+merged_data$Assay <- str_replace(merged_data$Assay, "NT3", "NTF3")
+merged_data$Assay <- str_replace(merged_data$Assay, "OPG", "TNFRSF11B")
+merged_data$Assay <- str_replace(merged_data$Assay, "SCP", "KITLG")
+merged_data$Assay <- str_replace(merged_data$Assay, "LAPTGFB-1", "TGFB1")
+merged_data$Assay <- str_replace(merged_data$Assay, "LAPTGFB1", "TGFB1")
+
+merged_data$Assay <- str_replace(merged_data$Assay, "TWEAK", "TNFSF12")
+merged_data$Assay <- str_replace(merged_data$Assay, "TRAIL", "TNFSF10")
+merged_data$Assay <- str_replace(merged_data$Assay, "PDL1", "Q9NZQ7")
+merged_data$Assay <- str_replace(merged_data$Assay, "TNFB", "LTA")
+merged_data$Assay <- str_replace(merged_data$Assay, "TRANCE", "TNFSF11")
+merged_data$Assay <- str_replace(merged_data$Assay, "MCP4", "CCL13")
+merged_data$Assay <- str_replace(merged_data$Assay, "MCP1", "CCL2")
+merged_data$Assay <- str_replace(merged_data$Assay, "IL8", "CXCL8")
+merged_data$Assay <- str_replace(merged_data$Assay, "uPA", "PLAU")
+merged_data$Assay <- str_replace(merged_data$Assay, "IL8", "CXCL8")
+
+```
+
+
+# Create a separate data frame for each olink dataset based on age
+```{r}
+olink_5y <- merged_data[merged_data$time == '5Y', ]
+olink_1y <- merged_data[merged_data$time == '1Y', ]
+
+```
+
+
+
+#  2 or more systemic antibiotics between birth and 1 year, and 1-YEAR serum cytokine levels
+```{r}
+
+
+olink_1y_filtered = olink_1y
+olink_1y_filtered <- subset(olink_1y_filtered, !is.na(systemic_ab_gte_2))
+
+ttest_results_1y_systemic_ab_gte2 <- olink_ttest(
+  df = olink_1y_filtered,
+  variable = "systemic_ab_gte_2",
+  alternative = "two.sided")
+
+ttest_results_1y_systemic_ab_gte2[order(ttest_results_1y_systemic_ab_gte2$Threshold, decreasing = TRUE),]
+
+```
+
+
+```{r}
+
+set.seed(42) 
+
+gsea_1y_systemic_ab_gte2_results <- olink_pathway_enrichment(data = olink_1y_filtered, ontology='MSigDb',test_results = ttest_results_1y_systemic_ab_gte2)
+gsea_1y_systemic_ab_gte2_results$exposure = 'Two or more systemic antibiotics given (birth-3m)'
+
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_1y_systemic_ab_gte2_results <- gsea_1y_systemic_ab_gte2_results %>% filter(p.adjust < 0.05)
+gsea_1y_systemic_ab_gte2_results <- gsea_1y_systemic_ab_gte2_results[c("exposure", setdiff(names(gsea_1y_systemic_ab_gte2_results), "exposure"))]
+write.csv(gsea_1y_systemic_ab_gte2_results,"olink_1y_gsea_1y_systemic_ab_gte2_results.csv")
+
+gsea_1y_systemic_ab_gte2_results[order(gsea_1y_systemic_ab_gte2_results$p.adjust, decreasing = FALSE),]
+```
+
+#  2 or more systemic antibiotics between birth and 1 year, and 5-YEAR serum cytokine levels
+
+```{r}
+
+
+olink_5y_filtered = olink_5y
+olink_5y_filtered <- subset(olink_5y_filtered, !is.na(systemic_ab_gte_2))
+
+systemic_ab_gte_2 <- olink_ttest(
+  df = olink_5y_filtered,
+  variable = "systemic_ab_gte_2",
+  alternative = "two.sided")
+
+ttest_results_5y_systemic_ab_gte2[order(ttest_results_5y_systemic_ab_gte2$Threshold, decreasing = FALSE),]
+write.csv(ttest_results_5y_systemic_ab_gte2,"ttest_results_5y_systemic_ab_gte2.csv")
+```
+```{r}
+olink_5y_filtered |> 
+  filter(systemic_ab_gte_2 == 1) |> 
+  distinct(subjectnumber) |> 
+  nrow()
+```
+
+
+```{r}
+
+set.seed(42) 
+
+gsea_5y_systemic_ab_gte2_results <- olink_pathway_enrichment(data = olink_5y_filtered, ontology='MSigDb',test_results = ttest_results_5y_systemic_ab_gte2)
+gsea_5y_systemic_ab_gte2_results$exposure = 'Two or more systemic antibiotics given (birth-3m)'
+
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_5y_systemic_ab_gte2_results <- gsea_5y_systemic_ab_gte2_results %>% filter(p.adjust < 0.05)
+gsea_5y_systemic_ab_gte2_results <- gsea_5y_systemic_ab_gte2_results[c("exposure", setdiff(names(gsea_5y_systemic_ab_gte2_results), "exposure"))]
+write.csv(gsea_5y_systemic_ab_gte2_results,"olink_gsea_5y_systemic_ab_gte2_results.csv")
+
+gsea_5y_systemic_ab_gte2_results[order(gsea_5y_systemic_ab_gte2_results$NES, decreasing = TRUE),]
+```
+
+#  3 or more systemic antibiotics between birth and 1 year, and 5-YEAR serum cytokine levels
+
+```{r}
+
+
+olink_5y_filtered = olink_5y
+olink_5y_filtered <- subset(olink_5y_filtered, !is.na(systemic_ab_gte_3))
+
+olink_5y_filtered |> 
+  filter(systemic_ab_gte_3 == 1) |> 
+  distinct(subjectnumber) 
+
+
+
+ttest_results_5y_systemic_ab_gte3 <- olink_ttest(
+  df = olink_5y_filtered,
+  variable = "systemic_ab_gte_3",
+  alternative = "two.sided")
+
+ttest_results_5y_systemic_ab_gte3[order(ttest_results_5y_systemic_ab_gte3$Threshold, decreasing = TRUE),]
+
+```
+
+```{r}
+olink_5y_filtered |> 
+  filter(systemic_ab_gte_3 !=1) |> 
+  distinct(subjectnumber) |> 
+  nrow()
+```
+
+
+
+```{r}
+
+set.seed(42) 
+
+gsea_5y_systemic_ab_gte3_results <- olink_pathway_enrichment(data = olink_5y_filtered, ontology='MSigDb',test_results = ttest_results_5y_systemic_ab_gte3)
+gsea_5y_systemic_ab_gte3_results$exposure = 'Three or more systemic antibiotics given (birth-3m)'
+
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_5y_systemic_ab_gte3_results <- gsea_5y_systemic_ab_gte3_results %>% filter(p.adjust < 0.05)
+gsea_5y_systemic_ab_gte3_results <- gsea_5y_systemic_ab_gte3_results[c("exposure", setdiff(names(gsea_5y_systemic_ab_gte3_results), "exposure"))]
+write.csv(gsea_5y_systemic_ab_gte3_results,"olink_gsea_5y_systemic_ab_gte3_results.csv")
+
+gsea_5y_systemic_ab_gte3_results[order(gsea_5y_systemic_ab_gte3_results$NES, decreasing = FALSE),]
+```
+
+
+#  2 or more systemic antibiotics between birth and 1 year (with anti-allergic medicine participants removed), and 5-YEAR serum cytokine levels
+
+I removed participants that were taking anti-allergic medications (e.g. meds for asthma or allergic rhinitis)
+
+```{r}
+
+
+olink_5y_filtered = olink_5y
+olink_5y_filtered <- subset(olink_5y_filtered, !is.na(systemic_ab_gte_2))
+olink_5y_filtered <- olink_5y_filtered |> 
+  filter(!subjectnumber %in% c(20138,20148, 20655, 50121, 50154, 50326))
+
+ttest_results_5y_systemic_ab_gte2 <- olink_ttest(
+  df = olink_5y_filtered,
+  variable = "systemic_ab_gte_2",
+  alternative = "two.sided")
+write.csv(ttest_results_5y_systemic_ab_gte2,"ttest_results_5y_systemic_ab_gte2medsremoved.csv")
+ttest_results_5y_systemic_ab_gte2[order(ttest_results_5y_systemic_ab_gte2$Threshold, decreasing = TRUE),]
+```
+```{r}
+olink_5y_filtered |> 
+  filter(systemic_ab_gte_2 == 1) |> 
+  distinct(subjectnumber) |> 
+  nrow()
+```
+
+```{r}
+
+set.seed(42) 
+
+gsea_5y_systemic_ab_gte2_results <- olink_pathway_enrichment(data = olink_5y_filtered, ontology='MSigDb',test_results = ttest_results_5y_systemic_ab_gte2)
+gsea_5y_systemic_ab_gte2_results$exposure = 'Two or more systemic antibiotics given (birth-3m)'
+
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_5y_systemic_ab_gte2_results <- gsea_5y_systemic_ab_gte2_results %>% filter(p.adjust < 0.05)
+gsea_5y_systemic_ab_gte2_results <- gsea_5y_systemic_ab_gte2_results[c("exposure", setdiff(names(gsea_5y_systemic_ab_gte2_results), "exposure"))]
+write.csv(gsea_5y_systemic_ab_gte2_results,"olink_gsea_5y_systemic_ab_gte2_medsremoved_results.csv")
+
+
+gsea_5y_systemic_ab_gte2_results[order(gsea_5y_systemic_ab_gte2_results$p.adjust, decreasing = FALSE),]
+```
+
+
+#  2 systemic antibiotics between birth and 1 year, and 5-YEAR serum cytokine levels
+
+```{r}
+
+olink_5y_filtered = olink_5y
+
+olink_5y_filtered <- subset(olink_5y_filtered, !is.na(systemic_ab_eq_2))
+olink_5y_filtered <- olink_5y_filtered |> filter(num_systemic_ab_0_to_3_months<=2) # Remove any rows where num systemic antibiotics is 3 or greater, so that there is no overlap with the 3+ ab analysis
+olink_5y_filtered <- olink_5y_filtered |> 
+  filter(!subjectnumber %in% c(20138, 20655, 50121, 50154, 50326))
+
+ttest_results_5y_systemic_ab_eq_2 <- olink_ttest(
+  df = olink_5y_filtered,
+  variable = "systemic_ab_eq_2",
+  alternative = "two.sided")
+write.csv(ttest_results_5y_systemic_ab_eq_2,"ttest_results_5y_systemic_ab_eq_2.csv")
+ttest_results_5y_systemic_ab_eq_2[order(ttest_results_5y_systemic_ab_eq_2$Threshold, decreasing = TRUE),]
+```
+```{r}
+olink_5y_filtered |> 
+  filter(systemic_ab_eq_2 == 1) |> 
+  distinct(subjectnumber)
+```
+
+
+```{r}
+
+set.seed(42) 
+
+gsea_5y_systemic_ab_eq2_results <- olink_pathway_enrichment(data = olink_5y_filtered, ontology='MSigDb',test_results = ttest_results_5y_systemic_ab_eq_2)
+gsea_5y_systemic_ab_eq2_results$exposure = 'Two systemic antibiotics given (birth-3m)'
+
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_5y_systemic_ab_eq2_results <- gsea_5y_systemic_ab_eq2_results %>% filter(p.adjust < 0.05)
+gsea_5y_systemic_ab_eq2_results <- gsea_5y_systemic_ab_eq2_results[c("exposure", setdiff(names(gsea_5y_systemic_ab_eq2_results), "exposure"))]
+write.csv(gsea_5y_systemic_ab_eq2_results,"olink_gsea_5y_systemic_ab_eq2_results.csv")
+
+
+gsea_5y_systemic_ab_eq2_results[order(gsea_5y_systemic_ab_eq2_results$p.adjust, decreasing = FALSE),]
+```
+
+
+#  Adrenic acid levels in upper quartile and 5-year pathways
+
+```{r}
+olink_5y_filtered <- subset(olink_5y, !is.na(upper_quartile_adrenic_acid))
+
+
+ttest_results_monthly_upper_quartile_adrenic_acid_5y <- olink_ttest(
+  df = olink_5y_filtered,
+  variable = "upper_quartile_adrenic_acid",
+  alternative = "two.sided")
+
+ttest_results_monthly_upper_quartile_adrenic_acid_5y[order(ttest_results_monthly_upper_quartile_adrenic_acid_5y$estimate, decreasing = FALSE),]
+```
+
+```{r}
+olink_5y_filtered |> 
+  filter(upper_quartile_adrenic_acid == 0) |> 
+  distinct(subjectnumber) |> 
+  nrow()
+```
+
+```{r}
+
+set.seed(42) 
+
+gsea_results_upper_quartile_adrenic_acid_5y <- olink_pathway_enrichment(data = olink_5y_filtered, ontology='MSigDb',test_results = ttest_results_monthly_upper_quartile_adrenic_acid_5y)
+gsea_results_upper_quartile_adrenic_acid_5y$exposure = 'Upper quartile adrenic acid'
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_results_upper_quartile_adrenic_acid_5y <- gsea_results_upper_quartile_adrenic_acid_5y %>% filter(p.adjust < 0.05)
+gsea_results_upper_quartile_adrenic_acid_5y <- gsea_results_upper_quartile_adrenic_acid_5y[c("exposure", setdiff(names(gsea_results_upper_quartile_adrenic_acid_5y), "exposure"))]
+write.csv(gsea_results_upper_quartile_adrenic_acid_5y,"olink_5y_upper_quartile_adrenic_acid_5y.csv")
+
+gsea_results_upper_quartile_adrenic_acid_5y[order(gsea_results_upper_quartile_adrenic_acid_5y$NES, decreasing = FALSE),]
+```
+
+
+#  Daily hand sanitizer use (prenatal) and 1-year pathways
+
+```{r}
+
+olink_1y_filtered = olink_1y
+ttest_results_daily_prenatal_hand_sanitizer_1y <- olink_ttest(
+  df = olink_1y_filtered,
+  variable = "daily_hand_sanitizer_used_prenatal",
+  alternative = "two.sided")
+
+
+ttest_results_daily_prenatal_hand_sanitizer_1y[order(ttest_results_daily_prenatal_hand_sanitizer_1y$estimate, decreasing = FALSE),]
+```
+
+
+```{r}
+
+set.seed(42) 
+
+gsea_daily_prenatal_hand_sanitizer_1y_results <- olink_pathway_enrichment(data = olink_1y_filtered, ontology='MSigDb',test_results = ttest_results_daily_prenatal_hand_sanitizer_1y)
+gsea_daily_prenatal_hand_sanitizer_1y_results$exposure = 'Daily hand sanitizer used by mother (prenatal)'
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_daily_prenatal_hand_sanitizer_1y_results <- gsea_daily_prenatal_hand_sanitizer_1y_results %>% filter(p.adjust < 0.05)
+gsea_daily_prenatal_hand_sanitizer_1y_results <- gsea_daily_prenatal_hand_sanitizer_1y_results[c("exposure", setdiff(names(gsea_daily_prenatal_hand_sanitizer_1y_results), "exposure"))]
+write.csv(gsea_daily_prenatal_hand_sanitizer_1y_results,"olink_1y_prenatal_daily_hand_sanitizer.csv")
+gsea_daily_prenatal_hand_sanitizer_1y_results
+```
+
+
+
+#  Daily hand sanitizer use (prenatal) and 5-year pathways
+
+```{r}
+olink_5y_filtered <- subset(olink_5y, !is.na(daily_hand_sanitizer_used_prenatal))
+
+ttest_results_daily_prenatal_hand_sanitizer_5y <- olink_ttest(df = olink_5y_filtered, variable = "daily_hand_sanitizer_used_prenatal")
+
+ttest_results_daily_prenatal_hand_sanitizer_5y <- olink_ttest(
+  df = olink_5y_filtered,
+  variable = "daily_hand_sanitizer_used_prenatal",
+  alternative = "two.sided")
+
+ttest_results_daily_prenatal_hand_sanitizer_5y[order(ttest_results_daily_prenatal_hand_sanitizer_5y$estimate, decreasing = FALSE),]
+```
+
+```{r}
+olink_5y_filtered |> 
+  filter(daily_hand_sanitizer_used_prenatal == 0) |> 
+  distinct(subjectnumber) |> 
+  nrow()
+```
+
+```{r}
+
+set.seed(42) 
+
+gsea_results_daily_prenatal_hand_sanitizer_5y <- olink_pathway_enrichment(data = olink_5y_filtered, ontology='MSigDb',test_results = ttest_results_daily_prenatal_hand_sanitizer_5y)
+gsea_results_daily_prenatal_hand_sanitizer_5y$exposure = 'Daily hand sanitizer used by mother (prenatal)'
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_results_daily_prenatal_hand_sanitizer_5y <- gsea_results_daily_prenatal_hand_sanitizer_5y %>% filter(p.adjust < 0.05)
+gsea_results_daily_prenatal_hand_sanitizer_5y <- gsea_results_daily_prenatal_hand_sanitizer_5y[c("exposure", setdiff(names(gsea_results_daily_prenatal_hand_sanitizer_5y), "exposure"))]
+write.csv(gsea_results_daily_prenatal_hand_sanitizer_5y,"olink_5y_prenatal_daily_hand_sanitizer.csv")
+
+gsea_results_daily_prenatal_hand_sanitizer_5y[order(gsea_results_daily_prenatal_hand_sanitizer_5y$NES, decreasing = FALSE),]
+```
+
+
+# Cleaning home more than 4 times per month (birth-3m) and 1-year pathways
+```{r}
+
+olink_1y$clean_home_more_than_4_times_per_month_3m = factor(olink_1y$clean_home_more_than_4_times_per_month_3m)
+
+ttest_results_1y_clean_home_more_than_4_times_per_month_3m <- olink_ttest(
+  df = olink_1y,
+  variable = "clean_home_more_than_4_times_per_month_3m",
+  alternative = "two.sided")
+
+
+ttest_results_1y_clean_home_more_than_4_times_per_month_3m[order(ttest_results_1y_clean_home_more_than_4_times_per_month_3m$estimate, decreasing = FALSE),]
+```
+
+
+```{r}
+
+set.seed(42) 
+
+gsea_results_1y_clean_home_more_than_4_times_per_month_3m <- olink_pathway_enrichment(data = olink_1y, ontology='MSigDb',test_results = ttest_results_1y_clean_home_more_than_4_times_per_month_3m)
+gsea_results_1y_clean_home_more_than_4_times_per_month_3m$exposure = 'Clean home more than 4 times per month (birth-3m)'
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_results_1y_clean_home_more_than_4_times_per_month_3m <- gsea_results_1y_clean_home_more_than_4_times_per_month_3m %>% filter(p.adjust < 0.05)
+gsea_results_1y_clean_home_more_than_4_times_per_month_3m <- gsea_results_1y_clean_home_more_than_4_times_per_month_3m[c("exposure", setdiff(names(gsea_results_1y_clean_home_more_than_4_times_per_month_3m), "exposure"))]
+
+
+write.csv(gsea_results_1y_clean_home_more_than_4_times_per_month_3m,"olink_1y_clean_home_more_than_4_times_per_month.csv")
+
+gsea_results_1y_clean_home_more_than_4_times_per_month_3m
+
+```
+
+
+# Cleaning home more than 4 times per month (birth-3m) and 5-year pathways
+```{r}
+
+olink_5y$clean_home_more_than_4_times_per_month_3m = factor(olink_5y$clean_home_more_than_4_times_per_month_3m)
+
+ttest_results_5y_clean_home_more_than_4_times_per_month_3m <- olink_ttest(
+  df = olink_5y,
+  variable = "clean_home_more_than_4_times_per_month_3m",
+  alternative = "two.sided")
+
+
+ttest_results_5y_clean_home_more_than_4_times_per_month_3m[order(ttest_results_5y_clean_home_more_than_4_times_per_month_3m$estimate, decreasing = FALSE),]
+```
+
+```{r}
+
+set.seed(42) 
+
+gsea_results_5y_clean_home_more_than_4_times_per_month_3m <- olink_pathway_enrichment(data = olink_5y, ontology='MSigDb',test_results = ttest_results_5y_clean_home_more_than_4_times_per_month_3m)
+gsea_results_5y_clean_home_more_than_4_times_per_month_3m$exposure = 'Clean home more than 4 times per month (birth-3m)'
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_results_5y_clean_home_more_than_4_times_per_month_3m <- gsea_results_5y_clean_home_more_than_4_times_per_month_3m %>% filter(p.adjust < 0.05)
+gsea_results_5y_clean_home_more_than_4_times_per_month_3m <- gsea_results_5y_clean_home_more_than_4_times_per_month_3m[c("exposure", setdiff(names(gsea_results_5y_clean_home_more_than_4_times_per_month_3m), "exposure"))]
+
+write.csv(gsea_results_5y_clean_home_more_than_4_times_per_month_3m,"olink_5y_clean_home_more_than_4_times_per_month.csv")
+
+gsea_results_5y_clean_home_more_than_4_times_per_month_3m
+
+```
+
+
+
+#  DEHP levels in house dust greater than 75th percentile and enriched pathways at 1 year
+
+```{r}
+olink_1y_filtered_data <- subset(olink_1y, !is.na(upper_quartile_indicator))
+olink_1y_filtered_data$upper_quartile_indicator = factor(olink_1y_filtered_data$upper_quartile_indicator)
+
+ttest_results_1y_dehp <- olink_ttest(
+  df = olink_1y_filtered_data,
+  variable = "upper_quartile_indicator",
+  alternative = "two.sided")
+
+ttest_results_1y_dehp[order(ttest_results_1y_dehp$estimate, decreasing = TRUE),]
+```
+
+
+```{r}
+olink_1y_filtered |> 
+  filter(upper_quartile_indicator == 0) |> 
+  distinct(subjectnumber) |> 
+  nrow()
+```
+
+```{r}
+
+set.seed(42) 
+
+gsea_results_1y_dehp <- olink_pathway_enrichment(data = olink_1y_filtered_data, ontology='MSigDb',test_results = ttest_results_1y_dehp)
+gsea_results_1y_dehp$exposure = 'Dust DEHP in upper  quartile'
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_results_1y_dehp <- gsea_results_1y_dehp %>% filter(p.adjust < 0.05)
+gsea_results_1y_dehp <- gsea_results_1y_dehp[c("exposure", setdiff(names(gsea_results_1y_dehp), "exposure"))]
+write.csv(gsea_results_1y_dehp,"olink_1y_dehp_upper_quartile.csv")
+gsea_results_1y_dehp
+```
+
+#  DEHP levels in house dust greater than 75th percentile and enriched pathways at 5 year
+
+```{r}
+olink_5y_filtered_data <- subset(olink_5y, !is.na(upper_quartile_indicator))
+olink_5y_filtered_data$upper_quartile_indicator = factor(olink_5y_filtered_data$upper_quartile_indicator)
+
+ttest_results_5y_dehp <- olink_ttest(
+  df = olink_5y_filtered_data,
+  variable = "upper_quartile_indicator",
+  alternative = "two.sided")
+
+ttest_results_5y_dehp[order(ttest_results_5y_dehp$estimate, decreasing = TRUE),]
+```
+
+
+```{r}
+olink_5y_filtered_data |> 
+  filter(upper_quartile_indicator == 1) |> 
+  distinct(subjectnumber) |> 
+  nrow()
+```
+
+```{r}
+
+set.seed(42) 
+
+gsea_results_5y_dehp <- olink_pathway_enrichment(data = olink_5y_filtered_data, ontology='MSigDb',test_results = ttest_results_5y_dehp)
+gsea_results_5y_dehp$exposure = 'Dust DEHP in upper  quartile'
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_results_5y_dehp <- gsea_results_5y_dehp %>% filter(p.adjust < 0.05)
+gsea_results_5y_dehp <- gsea_results_5y_dehp[c("exposure", setdiff(names(gsea_results_5y_dehp), "exposure"))]
+write.csv(gsea_results_5y_dehp,"olink_5y_dehp_upper_quartile.csv")
+gsea_results_5y_dehp
+```
+
+
+
+#  weekly chemical hand cleaner used (prenatal) and enriched pathways at 1 year
+```{r}
+olink_1y_filtered_data <- subset(olink_1y, !is.na(weekly_chem_hand_cleaner_use_mother_prenatal))
+
+
+ttest_results_1y_weekly_chem_hand_cleaner_use_mother_prenatal <- olink_ttest(
+  df = olink_1y_filtered_data,
+  variable = "weekly_chem_hand_cleaner_use_mother_prenatal",
+  alternative = "two.sided")
+
+
+ttest_results_1y_weekly_chem_hand_cleaner_use_mother_prenatal[order(ttest_results_1y_weekly_chem_hand_cleaner_use_mother_prenatal$estimate, decreasing = FALSE),]
+```
+
+
+
+```{r}
+olink_1y_filtered_data |> 
+  filter(weekly_chem_hand_cleaner_use_mother_prenatal == 0) |> 
+  distinct(subjectnumber) |> 
+  nrow()
+```
+
+
+```{r}
+# 'weekly_chem_hand_cleaner_use_mother_prenatal','weekly_oven_cleaner_use_mother_prenatal'))
+set.seed(42) 
+
+gsea_results_1y_weekly_chem_hand_cleaner_use_mother_prenatal <- olink_pathway_enrichment(data = olink_1y_filtered_data, ontology='MSigDb',test_results = ttest_results_1y_weekly_chem_hand_cleaner_use_mother_prenatal)
+
+gsea_results_1y_weekly_chem_hand_cleaner_use_mother_prenatal$exposure = 'Weekly chemical hand cleaner used by mother (prenatal)'
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_results_1y_weekly_chem_hand_cleaner_use_mother_prenatal <- gsea_results_1y_weekly_chem_hand_cleaner_use_mother_prenatal %>% filter(p.adjust < 0.05)
+gsea_results_1y_weekly_chem_hand_cleaner_use_mother_prenatal <- gsea_results_1y_weekly_chem_hand_cleaner_use_mother_prenatal[c("exposure", setdiff(names(gsea_results_1y_weekly_chem_hand_cleaner_use_mother_prenatal), "exposure"))]
+
+write.csv(gsea_results_1y_weekly_chem_hand_cleaner_use_mother_prenatal,"olink_1y_weekly_chem_hand_cleaner_use_mother_prenatal.csv")
+gsea_results_1y_weekly_chem_hand_cleaner_use_mother_prenatal
+
+```
+
+
+
+#  weekly chemical hand cleaner used (prenatal) and enriched pathways at 5 years
+
+```{r}
+olink_5y_filtered_data <- subset(olink_5y, !is.na(weekly_chem_hand_cleaner_use_mother_prenatal))
+
+
+ttest_results_5y_weekly_chem_hand_cleaner_use_mother_prenatal <- olink_ttest(
+  df = olink_5y_filtered_data,
+  variable = "weekly_chem_hand_cleaner_use_mother_prenatal",
+  alternative = "two.sided")
+
+
+ttest_results_5y_weekly_chem_hand_cleaner_use_mother_prenatal[order(ttest_results_5y_weekly_chem_hand_cleaner_use_mother_prenatal$estimate, decreasing = FALSE),]
+```
+
+```{r}
+olink_5y_filtered |> 
+  filter(weekly_chem_hand_cleaner_use_mother_prenatal == 1) |> 
+  distinct(subjectnumber) |> 
+  nrow()
+```
+
+
+```{r}
+# 'weekly_chem_hand_cleaner_use_mother_prenatal','weekly_oven_cleaner_use_mother_prenatal'))
+set.seed(42) 
+
+gsea_results_5y_weekly_chem_hand_cleaner_use_mother_prenatal <- olink_pathway_enrichment(data = olink_5y_filtered_data, ontology='MSigDb',test_results = ttest_results_5y_weekly_chem_hand_cleaner_use_mother_prenatal)
+
+gsea_results_5y_weekly_chem_hand_cleaner_use_mother_prenatal$exposure = 'Weekly chemical hand cleaner used by mother (prenatal)'
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_results_5y_weekly_chem_hand_cleaner_use_mother_prenatal <- gsea_results_5y_weekly_chem_hand_cleaner_use_mother_prenatal %>% filter(p.adjust < 0.05)
+gsea_results_5y_weekly_chem_hand_cleaner_use_mother_prenatal <- gsea_results_5y_weekly_chem_hand_cleaner_use_mother_prenatal[c("exposure", setdiff(names(gsea_results_5y_weekly_chem_hand_cleaner_use_mother_prenatal), "exposure"))]
+
+write.csv(gsea_results_5y_weekly_chem_hand_cleaner_use_mother_prenatal,"olink_5y_weekly_chem_hand_cleaner_use_mother_prenatal.csv")
+gsea_results_5y_weekly_chem_hand_cleaner_use_mother_prenatal
+
+```
+
+# Weekly oven cleaner (prenatal) and 1-year serum cytokine levels
+```{r}
+olink_1y_filtered_data <- subset(olink_1y, !is.na(weekly_oven_cleaner_use_mother_prenatal))
+
+
+ttest_results_1y_weekly_oven_cleaner_use_mother_prenatal <- olink_ttest(
+  df = olink_1y_filtered_data,
+  variable = "weekly_oven_cleaner_use_mother_prenatal",
+  alternative = "two.sided")
+
+ttest_results_1y_weekly_oven_cleaner_use_mother_prenatal[order(ttest_results_1y_weekly_oven_cleaner_use_mother_prenatal$estimate, decreasing = FALSE),]
+```
+```{r}
+olink_1y_filtered |> 
+  filter(weekly_oven_cleaner_use_mother_prenatal == 1) |> 
+  distinct(subjectnumber) |> 
+  nrow()
+```
+
+```{r}
+# 'weekly_chem_hand_cleaner_use_mother_prenatal','weekly_oven_cleaner_use_mother_prenatal'))
+set.seed(42) 
+
+gsea_results_1y_weekly_oven_cleaner_use_mother_prenatal <- olink_pathway_enrichment(data = olink_1y_filtered_data, ontology='MSigDb',test_results = ttest_results_1y_weekly_oven_cleaner_use_mother_prenatal)
+
+gsea_results_1y_weekly_oven_cleaner_use_mother_prenatal$exposure = 'Weekly oven cleaner used by mother (prenatal)'
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_results_1y_weekly_oven_cleaner_use_mother_prenatal <- gsea_results_1y_weekly_oven_cleaner_use_mother_prenatal %>% filter(p.adjust < 0.05)
+gsea_results_1y_weekly_oven_cleaner_use_mother_prenatal <- gsea_results_1y_weekly_oven_cleaner_use_mother_prenatal[c("exposure", setdiff(names(gsea_results_1y_weekly_oven_cleaner_use_mother_prenatal), "exposure"))]
+
+write.csv(gsea_results_1y_weekly_oven_cleaner_use_mother_prenatal,"olink_1y_weekly_oven_cleaner_use_mother_prenatal.csv")
+gsea_results_1y_weekly_oven_cleaner_use_mother_prenatal
+
+```
+
+
+
+
+
+
+# Weekly oven cleaner (prenatal) and 5-year serum cytokine levels
+```{r}
+olink_5y_filtered_data <- subset(olink_5y, !is.na(weekly_oven_cleaner_use_mother_prenatal))
+
+
+ttest_results_5y_weekly_oven_cleaner_use_mother_prenatal <- olink_ttest(
+  df = olink_5y_filtered_data,
+  variable = "weekly_oven_cleaner_use_mother_prenatal",
+  alternative = "two.sided")
+
+ttest_results_5y_weekly_oven_cleaner_use_mother_prenatal[order(ttest_results_5y_weekly_oven_cleaner_use_mother_prenatal$estimate, decreasing = FALSE),]
+```
+```{r}
+olink_5y_filtered |> 
+  filter(weekly_oven_cleaner_use_mother_prenatal == 1) |> 
+  distinct(subjectnumber) |> 
+  nrow()
+```
+
+
+```{r}
+# 'weekly_chem_hand_cleaner_use_mother_prenatal','weekly_oven_cleaner_use_mother_prenatal'))
+set.seed(42) 
+
+gsea_results_5y_weekly_oven_cleaner_use_mother_prenatal <- olink_pathway_enrichment(data = olink_5y_filtered_data, ontology='MSigDb',test_results = ttest_results_5y_weekly_oven_cleaner_use_mother_prenatal)
+
+gsea_results_5y_weekly_oven_cleaner_use_mother_prenatal$exposure = 'Weekly oven cleaner used by mother (prenatal)'
+
+# Drop rows with 'p.adjust' less than 0.05
+gsea_results_5y_weekly_oven_cleaner_use_mother_prenatal <- gsea_results_5y_weekly_oven_cleaner_use_mother_prenatal %>% filter(p.adjust < 0.05)
+gsea_results_5y_weekly_oven_cleaner_use_mother_prenatal <- gsea_results_5y_weekly_oven_cleaner_use_mother_prenatal[c("exposure", setdiff(names(gsea_results_5y_weekly_oven_cleaner_use_mother_prenatal), "exposure"))]
+
+write.csv(gsea_results_5y_weekly_oven_cleaner_use_mother_prenatal,"olink_5y_weekly_oven_cleaner_use_mother_prenatal.csv")
+gsea_results_5y_weekly_oven_cleaner_use_mother_prenatal
+
+```
+
+
+
+
