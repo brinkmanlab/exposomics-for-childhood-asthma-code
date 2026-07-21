@@ -12,7 +12,7 @@
 - Jupyter notebook that imports the training data, generates a Gradient Boosting Classifier model to predict 5-year asthma
 - Calculates SHAP values and plots the top 25 in a beeswarm plot (Figure 5a)
 - Calculates SHAP interaction values and plots interaction for the top 25 features in a heatmap (Figure 5b)
-- Generates 2D partial dependence plots displayed in Figure 5c and Supplementary figurue 16
+- Generates 2D partial dependence plots displayed in Figure 5c and Supplementary figure 16
 
 **Figures-4a-4b-S14-breastmilk-fatty-acid-associations-with-asthma-2025.ipynb:**
 
@@ -31,7 +31,7 @@
 **Plot_significant_olink_pathway_enrichment_results.ipynb:**
 
 - Jupyter notebook that reads in CSV files containing significantly enriched pathways identified by the Olink_GSEA_results scripts.
-- Generates the bubble plots used in Figure 4c (adrenic acid levels > 75tg percentile) and Supplementary figures 8c (daily prenatal hand sanitizer), 9a (weekly or more chemical hand cleaner), 10c and 10d (clean home >= 4 times per month between 0-3m), 12c and 12d (dust DEHP levels > 75th percentile), and 15 (two or more systemic antibiotic courses between birth and 12 months of age).
+- Generates the bubble plots used in Figure 4c (adrenic acid levels > 75th percentile) and Supplementary figures 8c (daily prenatal hand sanitizer), 9a (weekly or more chemical hand cleaner), 10c and 10d (clean home >= 4 times per month between 0-3m), 12c and 12d (dust DEHP levels > 75th percentile), and 15 (two or more systemic antibiotic courses between birth and 12 months of age).
 - Identifies leading edge genes found in at least 50% of the significant pathways from each GSEA which are used for characterization of T2-low, T2-low (T1-high), and T2-high cytokine profiles (Table 1). 
 
 **Supplementary-figure-13-alpha-diversity-mixed-effects-testing-vitamin_d-2025.ipynb:**
@@ -45,7 +45,7 @@
 
 **Supplementary-figures-S8-S10-cytokine-associations-2026-April-27-.ipynb:**
 
-- Mann-Whitney tests, unadjusted and adjusted multiple linear regressions for differences in individual cytokine level differences associated with prenataly daily hand sanitizer use and cleaning home 4 or more times per month (birth-3m). Used to generated Supplementary figures 8a, 8b, 10a, 10b. 
+- Mann-Whitney tests, unadjusted and adjusted multiple linear regressions for differences in individual cytokine level differences associated with prenatal daily hand sanitizer use and cleaning home 4 or more times per month (birth-3m). Used to generate Supplementary figures 8a, 8b, 10a, 10b. 
 
 **Supplementary-figures-S9-S12-eosinophil-ratios.ipynb:**
 
