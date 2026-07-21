@@ -1,7 +1,7 @@
 """
 File Paths, Global variables for modelling
 """
-__author__ = 'Stan He@Sickkids.ca'
+__author__ = 'Stan He'
 
 PATH = '../data/'
 
