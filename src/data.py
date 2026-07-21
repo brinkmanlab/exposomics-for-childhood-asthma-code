@@ -1,4 +1,4 @@
-__author__ = 'Stan He@Sickkids.ca'
+__author__ = 'Stan He'
 __date__ = '2021-10-13'
 """Generate xlsx in the output directory for ML pipeline
 """
