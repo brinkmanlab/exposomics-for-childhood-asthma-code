@@ -16,7 +16,7 @@
 
 **Figures-4a-4b-S14-breastmilk-fatty-acid-associations-with-asthma-2025.ipynb:**
 
-- Performs linear regression analyses that identified association between high adrenic acid levels in human milk and development of 5-year asthma in girls (Figure 4a), 8-year asthma in girls (Figure 4b).
+- Performs logistic regression analyses using stratification by sex that identified association between high adrenic acid levels in human milk and development of 5-year asthma in girls (Figure 4a), 8-year asthma in girls (Figure 4b).
 - Generates forest plot (Supplementary figure 14) of associations between GLA, DGLA, and AdA concentrations being in the upper quintile and 5 -year asthma after mutually adjusting for levels of all 3 fatty acids and expanded covariates including infant age at time of milk sample collection (n=911 children).
 
 **Olink_GSEA_results.Rmd:**
