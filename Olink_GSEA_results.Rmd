@@ -1,5 +1,5 @@
 ---
-title: "Analysyis of NPX format Olink data"
+title: "Analysis of NPX format Olink data"
 author: "Geoff Winsor"
 date: "2024-10-30"
 output: html_document
